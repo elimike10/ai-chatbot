@@ -4,9 +4,10 @@ import { isToday, isYesterday, subMonths, subWeeks } from 'date-fns';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import type { User } from 'next-auth';
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import useSWR from 'swr';
+import { debounce } from 'lodash';
 
 import {
   CheckCircleFillIcon,
@@ -150,7 +151,402 @@ export const ChatItem = memo(PureChatItem, (prevProps, nextProps) => {
 });
 
 export function SidebarHistory({ user }: { user: User | undefined }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useParams();
   const { setOpenMobile } = useSidebar();
+
+  // Fetch chat history only if user is authenticated
+  const { data: chats, mutate: mutateChats, error, isLoading } = useSWR<Chat[]>(
+    user ? '/api/history' : null,
+    fetcher,
+    {
+      fallbackData: [],
+    }
+  );
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
+  const [chatToDelete, setChatToDelete] = useState<string | null>(null);
+
+  const handleDeleteChat = useCallback(async () => {
+    if (!chatToDelete || !user) return;
+
+    try {
+      const response = await fetch(`/api/history/${chatToDelete}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete chat');
+      }
+
+      // Update local state after successful deletion
+      mutateChats(
+        (chats) => chats?.filter((chat) => chat.id !== chatToDelete) ?? [],
+        false
+      );
+
+      // Redirect to home if the deleted chat was the current one
+      if (params?.id === chatToDelete) {
+        router.push('/');
+      }
+
+      setIsDeleteDialogOpen(false);
+      setIsConfirmDialogOpen(false);
+      setChatToDelete(null);
+      toast.success('Chat deleted');
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+      toast.error('Failed to delete chat');
+    }
+  }, [chatToDelete, user, mutateChats, params, router]);
+
+  const debouncedHandleDeleteChat = useCallback(
+    debounce(handleDeleteChat, 300),
+    [handleDeleteChat]
+  );
+
+  const onDelete = useCallback((chatId: string) => {
+    setIsConfirmDialogOpen(true);
+    setChatToDelete(chatId);
+  }, []);
+
+  const onConfirmDelete = useCallback(() => {
+    setIsConfirmDialogOpen(false);
+    setIsDeleteDialogOpen(true);
+    debouncedHandleDeleteChat();
+  }, [debouncedHandleDeleteChat]);
+
+  // Group chats by date
+  const groupedChats = chats?.reduce<GroupedChats>(
+    (groups, chat) => {
+      const date = new Date(chat.createdAt);
+      if (isToday(date)) {
+        groups.today.push(chat);
+      } else if (isYesterday(date)) {
+        groups.yesterday.push(chat);
+      } else if (date > subWeeks(new Date(), 1)) {
+        groups.lastWeek.push(chat);
+      } else if (date > subMonths(new Date(), 1)) {
+        groups.lastMonth.push(chat);
+      } else {
+        groups.older.push(chat);
+      }
+      return groups;
+    },
+    { today: [], yesterday: [], lastWeek: [], lastMonth: [], older: [] }
+  ) ?? { today: [], yesterday: [], lastWeek: [], lastMonth: [], older: [] };
+
+  // Handle different states
+  if (!user) {
+    return (
+      <div className="px-4 py-2 text-sm text-sidebar-foreground/50">
+        Log in to view chat history
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="px-4 py-2 text-sm text-sidebar-foreground/50">
+        Loading chat history...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="px-4 py-2 text-sm text-sidebar-foreground/50">
+        Error loading chat history. Please try again.
+      </div>
+    );
+  }
+
+  if (chats?.length === 0) {
+    return (
+      <div className="px-4 py-2 text-sm text-sidebar-foreground/50">
+        No chat history available.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <SidebarGroup>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {Object.entries(groupedChats).map(([group, groupChats]) => {
+              if (groupChats.length === 0) return null;
+              return (
+                <div key={group}>
+                  <div className="px-2 py-1 text-xs font-semibold text-sidebar-foreground/50">
+                    {group}
+                  </div>
+                  {groupChats.map((chat) => (
+                    <ChatItem
+                      key={chat.id}
+                      chat={chat}
+                      isActive={pathname === `/chat/${chat.id}`}
+                      onDelete={onDelete}
+                      setOpenMobile={setOpenMobile}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete your chat message and remove your
+              data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteChat}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+    mutateChats(
+      (chats) => chats?.filter((chat) => chat.id !== chatToDelete) ?? [],
+      false
+    );
+
+    if (params?.id === chatToDelete) {
+      router.push('/');
+    }
+
+    setIsDeleteDialogOpen(false);
+    setChatToDelete(null);
+    toast.success('Chat deleted');
+  };
+
+  const onDelete = (chatId: string) => {
+    setIsDeleteDialogOpen(true);
+    setChatToDelete(chatId);
+  };
+
+  const groupedChats = chats.reduce<GroupedChats>(
+    (groups, chat) => {
+      const date = new Date(chat.createdAt);
+      if (isToday(date)) {
+        groups.today.push(chat);
+      } else if (isYesterday(date)) {
+        groups.yesterday.push(chat);
+      } else if (date > subWeeks(new Date(), 1)) {
+        groups.lastWeek.push(chat);
+      } else if (date > subMonths(new Date(), 1)) {
+        groups.lastMonth.push(chat);
+      } else {
+        groups.older.push(chat);
+      }
+      return groups;
+    },
+    { today: [], yesterday: [], lastWeek: [], lastMonth: [], older: [] }
+  );
+
+  if (!user) {
+    return (
+      <div className="px-4 py-2 text-sm text-sidebar-foreground/50">
+        Log in to view chat history
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <SidebarGroup>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {Object.entries(groupedChats).map(([group, groupChats]) => {
+              if (groupChats.length === 0) return null;
+              return (
+                <div key={group}>
+                  <div className="px-2 py-1 text-xs font-semibold text-sidebar-foreground/50">
+                    {group}
+                  </div>
+                  {groupChats.map((chat) => (
+                    <ChatItem
+                      key={chat.id}
+                      chat={chat}
+                      isActive={pathname === `/chat/${chat.id}`}
+                      onDelete={onDelete}
+                      setOpenMobile={setOpenMobile}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete your chat message and remove your
+              data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteChat}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+export function SidebarHistory({ user }: { user: User | undefined }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useParams();
+  const { setOpenMobile } = useSidebar();
+
+  const { data: chats, mutate: mutateChats } = useSWR<Chat[]>(
+    user ? '/api/history' : null,
+    fetcher,
+    {
+      fallbackData: [],
+    }
+  );
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [chatToDelete, setChatToDelete] = useState<string | null>(null);
+
+  const handleDeleteChat = async () => {
+    if (!chatToDelete || !user) return;
+
+    const response = await fetch(`/api/history/${chatToDelete}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      toast.error('Failed to delete chat');
+      return;
+    }
+
+    mutateChats(
+      (chats) => chats?.filter((chat) => chat.id !== chatToDelete) ?? [],
+      false
+    );
+
+    if (params?.id === chatToDelete) {
+      router.push('/');
+    }
+
+    setIsDeleteDialogOpen(false);
+    setChatToDelete(null);
+    toast.success('Chat deleted');
+  };
+
+  const onDelete = (chatId: string) => {
+    setIsDeleteDialogOpen(true);
+    setChatToDelete(chatId);
+  };
+
+  const groupedChats = chats.reduce<GroupedChats>(
+    (groups, chat) => {
+      const date = new Date(chat.createdAt);
+      if (isToday(date)) {
+        groups.today.push(chat);
+      } else if (isYesterday(date)) {
+        groups.yesterday.push(chat);
+      } else if (date > subWeeks(new Date(), 1)) {
+        groups.lastWeek.push(chat);
+      } else if (date > subMonths(new Date(), 1)) {
+        groups.lastMonth.push(chat);
+      } else {
+        groups.older.push(chat);
+      }
+      return groups;
+    },
+    { today: [], yesterday: [], lastWeek: [], lastMonth: [], older: [] }
+  );
+
+  if (!user) {
+    return (
+      <div className="px-4 py-2 text-sm text-sidebar-foreground/50">
+        Log in to view chat history
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <SidebarGroup>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {Object.entries(groupedChats).map(([group, groupChats]) => {
+              if (groupChats.length === 0) return null;
+              return (
+                <div key={group}>
+                  <div className="px-2 py-1 text-xs font-semibold text-sidebar-foreground/50">
+                    {group}
+                  </div>
+                  {groupChats.map((chat) => (
+                    <ChatItem
+                      key={chat.id}
+                      chat={chat}
+                      isActive={pathname === `/chat/${chat.id}`}
+                      onDelete={onDelete}
+                      setOpenMobile={setOpenMobile}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete your chat message and remove your
+              data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteChat}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
   const { id } = useParams();
   const pathname = usePathname();
   const {

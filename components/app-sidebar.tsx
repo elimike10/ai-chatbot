@@ -61,7 +61,24 @@ export function AppSidebar({ user }: { user: User | undefined }) {
       <SidebarContent>
         <SidebarHistory user={user} />
       </SidebarContent>
-      <SidebarFooter>{user && <SidebarUserNav user={user} />}</SidebarFooter>
+      <SidebarFooter>
+        {user ? (
+          <SidebarUserNav user={user} />
+        ) : (
+          <div className="flex justify-center space-x-2 p-4">
+            <Link href="/login">
+              <Button variant="outline" size="sm">
+                Log in
+              </Button>
+            </Link>
+            <Link href="/register">
+              <Button variant="outline" size="sm">
+                Register
+              </Button>
+            </Link>
+          </div>
+        )}
+      </SidebarFooter>
     </Sidebar>
   );
 }
