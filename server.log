@@ -1,0 +1,23 @@
+
+> ai-chatbot@0.1.0 dev
+> next dev --turbo
+
+   ▲ Next.js 15.0.3-canary.2 (Turbopack)
+   - Local:        http://localhost:3000
+   - Experiments (use with caution):
+     · ppr
+
+ ✓ Starting...
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+ ✓ Compiled in 748ms
+ ✓ Ready in 2.1s
+[31m[auth][error][0m MissingSecret: Please define a `secret`. Read more at https://errors.authjs.dev#missingsecret
+    at assertConfig (/home/user/ai-chatbot/.next/server/edge/chunks/node_modules_@auth_core_8b848e._.js:480:16)
+    at Auth (/home/user/ai-chatbot/.next/server/edge/chunks/node_modules_@auth_core_8b848e._.js:5081:202)
+ ○ Compiling / ...
+ ✓ Compiled / in 11.5s
+ HEAD / 200 in 12652ms
