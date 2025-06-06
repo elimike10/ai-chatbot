@@ -17,6 +17,7 @@ import {
   vote,
 } from './schema';
 import { BlockKind } from '@/components/block';
+import type { VisibilityType } from '@/components/visibility-selector';
 
 // Optionally, if not using email/pass login, you can
 // use the Drizzle adapter for Auth.js / NextAuth
@@ -314,12 +315,12 @@ export async function deleteMessagesByChatIdAfterTimestamp({
   }
 }
 
-export async function updateChatVisiblityById({
+export async function updateChatVisibilityById({
   chatId,
   visibility,
 }: {
   chatId: string;
-  visibility: 'private' | 'public';
+  visibility: VisibilityType;
 }) {
   try {
     return await db.update(chat).set({ visibility }).where(eq(chat.id, chatId));
